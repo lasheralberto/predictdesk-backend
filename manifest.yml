@@ -1,0 +1,14 @@
+---
+applications:
+- name: predictdesk
+  random-route: true
+  memory: 512M
+  disk_quota: 2G
+  
+  docker:
+    image: lasheralberto/sentiment-analysis-container:latest
+    username: lasheralberto   
+lifecycle:
+  type: docker
+
+

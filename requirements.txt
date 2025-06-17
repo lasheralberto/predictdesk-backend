@@ -1,0 +1,11 @@
+transformers
+textblob
+gunicorn
+Flask==3.1.1
+pandas
+Flask-RESTful
+python-dotenv
+joblib
+scikit-learn
+
+
