@@ -201,9 +201,10 @@ class ModelPredictionResource(Resource):
             
             # Cargar modelo si no está en memoria
             MODEL_DIR = "/app/resources/multitask_model"
+            print(f"Model dir: {MODEL_DIR}")
 
             if model_instance is None:
-                model_path = os.path.join(MODEL_DIR, "model_weights.pt")
+                model_path = MODEL_DIR
                 if not os.path.exists(model_path):
                     return {
                         'error': 'No se encontró un modelo entrenado. Model path: ' + model_path,
@@ -217,16 +218,20 @@ class ModelPredictionResource(Resource):
                 logger.info("Modelo cargado desde disco")
             
             # Realizar predicción
+            print("Vamos a predecir!")
             predictions = model_instance.predict(text)
             
             logger.info(f"Predicción realizada para texto: {text[:50]}...")
+            logger.info(f"Predicciones: {predictions}")
             
-            return {
+            response = {
                 'status': 'success',
                 'input_text': text,
                 'predictions': predictions,
                 'timestamp': datetime.now().isoformat()
-            }, 200
+            }
+
+            return response, 200
             
         except Exception as e:
             logger.error(f"Error durante la predicción: {str(e)}")

@@ -186,7 +186,19 @@ class MultiTaskFeedbackModel:
                     'confidence': probs[0][pred_class].item()
                 }
 
-        return predictions
+        return self.sanitize_prediction_response(predictions)
+
+    def sanitize_prediction_response(self, obj):
+        import numpy as np
+        if isinstance(obj, np.generic):
+            return obj.item()
+        elif isinstance(obj, dict):
+            return {k: self.sanitize_prediction_response(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.sanitize_prediction_response(v) for v in obj]
+        else:
+            return obj
+
 
     def save(self, path):
         import os

@@ -7,5 +7,6 @@ Flask-RESTful
 python-dotenv
 joblib
 scikit-learn
+numpy
 
 
