@@ -19,7 +19,7 @@ app = Flask(__name__)
 api = Api(app)
 
 # Configuración
-MODEL_DIR = "resources/model"
+MODEL_DIR = "resources/multitask_model"
 TEMP_DATA_DIR = "resources/temp"
 
 # Asegurar que los directorios existen
@@ -200,15 +200,20 @@ class ModelPredictionResource(Resource):
                 }, 400
             
             # Cargar modelo si no está en memoria
+            MODEL_DIR = "/app/resources/multitask_model"
+
             if model_instance is None:
-                if not os.path.exists(os.path.join(MODEL_DIR, "model_weights.pt")):
+                model_path = os.path.join(MODEL_DIR, "model_weights.pt")
+                if not os.path.exists(model_path):
                     return {
-                        'error': 'No se encontró un modelo entrenado. Entrene el modelo primero.',
+                        'error': 'No se encontró un modelo entrenado. Model path: ' + model_path,
                         'status': 'error'
                     }, 404
+                # cargar el modelo aquí con model_path
+
                 
                 model_instance = MultiTaskFeedbackModel()
-                model_instance.load(MODEL_DIR)
+                model_instance.load(model_path)
                 logger.info("Modelo cargado desde disco")
             
             # Realizar predicción

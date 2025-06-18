@@ -7,6 +7,34 @@ import pandas as pd
 import joblib
 from torch.utils.data import Dataset, DataLoader
 
+class FeedbackDataset(Dataset):
+    """Clase interna para manejo de datos"""
+    def __init__(self, texts, labels, tokenizer):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, idx):
+        encoding = self.tokenizer(
+            self.texts[idx],
+            max_length=128,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'sentiment_label': torch.tensor(self.labels['sentiment'][idx]),
+            'priority_label': torch.tensor(self.labels['priority'][idx]),
+            'category_label': torch.tensor(self.labels['category'][idx]),
+            'team_label': torch.tensor(self.labels['team'][idx])
+        }
+
 class MultiTaskFeedbackModel:
     """Clase principal que encapsula todo el modelo multitarea"""
     def __init__(self, model_name="distilbert-base-uncased"):
@@ -16,9 +44,7 @@ class MultiTaskFeedbackModel:
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Configuración de columnas
-        self.target_columns = ['sentiment_score', 'priority', 'category', 'team_assigned']
-        self.text_column = 'feedback'
+
 
         # Mapeo entre tareas internas y nombres reales de columnas
         self.task_to_column = {
@@ -28,33 +54,15 @@ class MultiTaskFeedbackModel:
             'team': 'team_assigned'
         }
 
-    class FeedbackDataset(Dataset):
-        """Clase interna para manejo de datos"""
-        def __init__(self, texts, labels, tokenizer):
-            self.texts = texts
-            self.labels = labels
-            self.tokenizer = tokenizer
+        # Columna input
+        self.text_column = 'feedback'
+        #Columnas del fichero
+        self.target_columns = list(self.task_to_column.values())
+        #Columnas del fichero traducidas para procesar
+        self.task_labels =  list(self.task_to_column.keys())
 
-        def __len__(self):
-            return len(self.texts)
+        self.FeedbackDataset = FeedbackDataset
 
-        def __getitem__(self, idx):
-            encoding = self.tokenizer(
-                self.texts[idx],
-                max_length=128,
-                padding='max_length',
-                truncation=True,
-                return_tensors='pt'
-            )
-
-            return {
-                'input_ids': encoding['input_ids'].flatten(),
-                'attention_mask': encoding['attention_mask'].flatten(),
-                'sentiment_label': torch.tensor(self.labels['sentiment'][idx]),
-                'priority_label': torch.tensor(self.labels['priority'][idx]),
-                'category_label': torch.tensor(self.labels['category'][idx]),
-                'team_label': torch.tensor(self.labels['team'][idx])
-            }
 
     def load_and_prepare_data(self, filepath):
         """Carga y prepara los datos para entrenamiento"""
@@ -136,7 +144,7 @@ class MultiTaskFeedbackModel:
                 # Calcular pérdida combinada
                 loss = sum(
                     loss_fn(task_outputs[task], batch[f'{task}_label'].to(self.device))
-                    for task in ['sentiment', 'priority', 'category', 'team']
+                    for task in self.task_labels
                 )
 
                 loss.backward()
@@ -165,7 +173,7 @@ class MultiTaskFeedbackModel:
             pooled_output = self.model['dropout'](pooled_output)
 
             predictions = {}
-            for task in ['sentiment', 'priority', 'category', 'team']:
+            for task in self.task_labels:
                 logits = self.model[task](pooled_output)
                 probs = torch.softmax(logits, dim=1)
                 pred_class = torch.argmax(probs).item()
@@ -181,11 +189,29 @@ class MultiTaskFeedbackModel:
         return predictions
 
     def save(self, path):
-        """Guarda el modelo y los encoders"""
+        import os
+        import torch
+        import joblib
+        import shutil
+        from google.colab import files
+        """Guarda el modelo, encoders y permite descargar como zip en Colab"""
         os.makedirs(path, exist_ok=True)
+
+        # Guardar pesos del modelo
         torch.save(self.model.state_dict(), f"{path}/model_weights.pt")
+
+        # Guardar los label encoders
         joblib.dump(self.label_encoders, f"{path}/label_encoders.pkl")
+
+        # Guardar tokenizer
         self.tokenizer.save_pretrained(path)
+
+        # Comprimir la carpeta en un zip
+        zip_path = f"{path}.zip"
+        shutil.make_archive(path, 'zip', path)
+
+        # Descargar el zip en Colab
+        files.download(zip_path)
 
     def load(self, path):
         """Carga un modelo guardado"""
@@ -199,36 +225,36 @@ class MultiTaskFeedbackModel:
     def evaluate_model(self, model, test_dataset, log_to_mlflow=True):
       """
       Versión simplificada de evaluación del modelo multitarea
-      
+
       Args:
           model: Modelo entrenado
           test_dataset: Dataset de prueba
           log_to_mlflow: Si registrar métricas en MLflow
-      
+
       Returns:
           dict: Diccionario con métricas básicas por tarea
       """
-      
+
       from sklearn.metrics import accuracy_score, precision_recall_fscore_support, confusion_matrix
       import numpy as np
       from torch.utils.data import DataLoader
       import torch
-      
+
       if not model:
           raise ValueError("El modelo no ha sido entrenado o cargado")
-      
+
       # Crear dataloader para evaluación
       test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=False)
-      
+
       # Diccionarios para almacenar predicciones y etiquetas reales
       results = {}
-      
+
       model.eval()
       with torch.no_grad():
           # Inicializar listas para cada tarea
-          for task in ['sentiment', 'priority', 'category', 'team']:
+          for task in self.task_labels:
               results[task] = {'predictions': [], 'labels': []}
-          
+
           # Procesar cada batch
           for batch in test_dataloader:
               # Mover datos al dispositivo
@@ -236,30 +262,30 @@ class MultiTaskFeedbackModel:
                   'input_ids': batch['input_ids'].to(self.device),
                   'attention_mask': batch['attention_mask'].to(self.device)
               }
-              
+
               # Forward pass
               outputs = model['bert'](**inputs)
               pooled_output = outputs.last_hidden_state[:, 0, :]
               pooled_output = model['dropout'](pooled_output)
-              
+
               # Obtener predicciones para cada tarea
-              for task in ['sentiment', 'priority', 'category', 'team']:
+              for task in self.task_labels:
                   logits = model[task](pooled_output)
                   predictions = torch.argmax(logits, dim=1)
-                  
+
                   results[task]['predictions'].extend(predictions.cpu().numpy())
                   results[task]['labels'].extend(batch[f'{task}_label'].numpy())
-      
+
       # Calcular métricas para cada tarea
       evaluation_results = {}
-      
-      for task in ['sentiment', 'priority', 'category', 'team']:
+
+      for task in self.task_labels:
           y_true = results[task]['labels']
           y_pred = results[task]['predictions']
-          
+
           # Métricas básicas
           accuracy = accuracy_score(y_true, y_pred)
-          
+
           # Precision, recall, f1 con manejo de errores
           try:
               precision, recall, f1, _ = precision_recall_fscore_support(
@@ -267,13 +293,13 @@ class MultiTaskFeedbackModel:
               )
           except:
               precision = recall = f1 = 0.0
-          
+
           # Matriz de confusión
           try:
               cm = confusion_matrix(y_true, y_pred)
           except:
               cm = np.array([[0]])
-          
+
           # Obtener nombres de clase de forma segura
           try:
               column_name = self.task_to_column[task]
@@ -284,10 +310,10 @@ class MultiTaskFeedbackModel:
               unique_labels = sorted(list(set(y_true + y_pred)))
               class_names = [f"class_{label}" for label in unique_labels]
               column_name = task
-          
+
           # Calcular score de relevancia simple
           relevance_score = self._calculate_simple_relevance(accuracy, f1)
-          
+
           evaluation_results[task] = {
               'column_name': column_name,
               'accuracy': round(accuracy, 4),
@@ -299,24 +325,23 @@ class MultiTaskFeedbackModel:
               'relevance_score': relevance_score,
               'num_samples': len(y_true)
           }
-      
-      
+
       # Imprimir resumen simple
       self._print_simple_summary(evaluation_results)
-      
+
       return evaluation_results
 
 
     def _calculate_simple_relevance(self, accuracy, f1):
         """
         Calcula un score de relevancia simple basado en accuracy y f1
-        
+
         Returns:
             dict: Puntuación de relevancia simplificada
         """
         # Score simple: promedio de accuracy y f1
         score = (accuracy + f1) / 2
-        
+
         # Determinar nivel de relevancia
         if score >= 0.8:
             level = "MUY ALTA"
@@ -328,7 +353,7 @@ class MultiTaskFeedbackModel:
             level = "BAJA"
         else:
             level = "MUY BAJA"
-        
+
         # Interpretación simple
         if accuracy < 0.5:
             interpretation = "⚠️ Precisión baja - Modelo tiene dificultades"
@@ -338,7 +363,7 @@ class MultiTaskFeedbackModel:
             interpretation = "⚠️ F1 bajo - Posible desbalance"
         else:
             interpretation = "📊 Rendimiento aceptable"
-        
+
         return {
             'score': round(score, 4),
             'level': level,
@@ -346,38 +371,38 @@ class MultiTaskFeedbackModel:
         }
 
 
-    def model_evaluation_summary(self, evaluation_results):
+    def _print_simple_summary(self, evaluation_results):
         """
         Imprime un resumen simple de la evaluación
         """
-        summary_dict = {
-            task: {
-                "campo": metrics["column_name"],
-                "muestras": metrics["num_samples"],
-                "accuracy": round(metrics["accuracy"], 3),
-                "f1_score": round(metrics["f1_score"], 3),
-                "relevancia": {
-                    "nivel": metrics["relevance_score"]["level"],
-                    "score": round(metrics["relevance_score"]["score"], 3),
-                    "interpretacion": metrics["relevance_score"]["interpretation"]
-                },
-                "num_clases": len(metrics["class_names"]),
-                "clases_ejemplo": (
-                    metrics["class_names"][:3] + ["..."]
-                    if len(metrics["class_names"]) > 3
-                    else metrics["class_names"]
-                )
-            }
-            for task, metrics in evaluation_results.items()
-        }
+        print("=" * 60)
+        print("RESUMEN DE EVALUACIÓN DEL MODELO")
+        print("=" * 60)
+
+        for task, metrics in evaluation_results.items():
+            print(f"\n📋 TAREA: {task.upper()}")
+            print(f"   Campo: {metrics['column_name']}")
+            print(f"   Muestras: {metrics['num_samples']}")
+            print(f"   Accuracy: {metrics['accuracy']:.3f}")
+            print(f"   F1-Score: {metrics['f1_score']:.3f}")
+            print(f"   Relevancia: {metrics['relevance_score']['level']} ({metrics['relevance_score']['score']:.3f})")
+            print(f"   {metrics['relevance_score']['interpretation']}")
+            print(f"   Clases: {len(metrics['class_names'])} ({', '.join(metrics['class_names'][:3])}{'...' if len(metrics['class_names']) > 3 else ''})")
+
+        print("\n" + "=" * 60)
 
         # Resumen general
         avg_accuracy = np.mean([metrics['accuracy'] for metrics in evaluation_results.values()])
         avg_f1 = np.mean([metrics['f1_score'] for metrics in evaluation_results.values()])
- 
-        
+
+        print(f"📊 RENDIMIENTO GENERAL:")
+        print(f"   Accuracy promedio: {avg_accuracy:.3f}")
+        print(f"   F1-Score promedio: {avg_f1:.3f}")
+
         # Mejores y peores tareas
         best_task = max(evaluation_results.keys(), key=lambda x: evaluation_results[x]['f1_score'])
         worst_task = min(evaluation_results.keys(), key=lambda x: evaluation_results[x]['f1_score'])
- 
-   
+
+        print(f"   🥇 Mejor tarea: {best_task} (F1: {evaluation_results[best_task]['f1_score']:.3f})")
+        print(f"   🔴 Peor tarea: {worst_task} (F1: {evaluation_results[worst_task]['f1_score']:.3f})")
+        print("=" * 60)
