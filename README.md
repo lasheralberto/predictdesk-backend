@@ -1,329 +1,197 @@
-﻿# predictdesk-backend
-# API de Análisis de Sentimientos
+![Banner](.github/images/banner.png)
 
-Esta API Flask utiliza la clase `SentimentModelService` para proporcionar análisis de sentimientos a través de endpoints REST.
+This is a comprehensive, professional `README.md` tailored for the **predictdesk-backend** repository. It reflects the multi-task nature of the project while providing clear instructions for setup, usage, and deployment.
 
+---
 
-## 🚀 Instalación y Ejecución
+# PredictDesk Backend
 
-### Dependencias
+[![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Framework](https://img.shields.io/badge/framework-Flask-red)](https://flask.palletsprojects.com/)
+[![Deep Learning](https://img.shields.io/badge/library-PyTorch-orange)](https://pytorch.org/)
+[![Transformers](https://img.shields.io/badge/library-HuggingFace-yellow)](https://huggingface.co/docs/transformers/index)
+
+PredictDesk Backend is a high-performance Python-based service designed for **multi-task and multi-class text prediction**. It leverages Deep Learning models (Transformer architecture) to categorize text input into various classes such as sentiment, intent, or priority.
+
+Built with **Flask** and **PyTorch**, this backend is container-ready and prepared for deployment on cloud platforms like Heroku, AWS, or IBM Cloud.
+
+---
+
+## 🚀 Features
+
+-   **Multi-Task Prediction**: Ability to predict multiple attributes from a single text input using a unified model architecture.
+-   **RESTful API**: Clean endpoints for health monitoring, model metadata, and inference.
+-   **Pre-trained Transformer Support**: Built-in support for Hugging Face tokenizers and custom PyTorch weights.
+-   **Production Ready**: Includes `Dockerfile`, `Procfile`, and `manifest.yml` for various deployment environments.
+-   **Robust Pre-processing**: Integrated label encoders and tokenization pipelines.
+
+---
+
+## 🛠️ Tech Stack
+
+-   **Language**: Python 3.9+
+-   **Web Framework**: Flask, Flask-RESTful
+-   **Machine Learning**: PyTorch, Hugging Face Transformers
+-   **Data Processing**: Pandas, Scikit-learn (LabelEncoders)
+-   **Deployment**: Docker, Gunicorn
+
+---
+
+## 📁 Project Structure
+
+```text
+predictdesk-backend/
+├── app.py                     # API entry point and routes
+├── multitask_model.py         # Model architecture definition (PyTorch)
+├── resources/
+│   └── multitask_model/       # Model artifacts
+│       ├── model_weights.pt   # Trained PyTorch weights
+│       ├── label_encoders.pkl # Categorical mappings
+│       ├── vocab.txt          # Tokenizer vocabulary
+│       └── tokenizer.json     # Tokenizer configuration
+├── Dockerfile                 # Containerization instructions
+├── Procfile                   # Process file for Heroku/PaaS
+├── requirements.txt           # Python dependencies
+└── .env                       # Environment variables
+```
+
+---
+
+## 📥 Installation
+
+### 1. Clone the repository
 ```bash
-pip install flask flask-restful torch transformers datasets evaluate
+git clone https://github.com/your-repo/predictdesk-backend.git
+cd predictdesk-backend
 ```
 
-### Estructura de Archivos
-```
-proyecto/
-├── app.py                 # API Flask
-├── sentiment_service.py   # Clase SentimentModelService
-├── resources/            # Carpeta con modelo y configuraciones
-│   ├── model/           # Modelo entrenado
-│   ├── config/          # Configuraciones y etiquetas
-│   ├── data/            # Datasets
-│   └── logs/            # Logs de entrenamiento
-└── requirements.txt     # Dependencias
+### 2. Create a Virtual Environment
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-### Ejecutar la API
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Set up Environment Variables
+Create a `.env` file in the root directory:
+```env
+FLASK_ENV=production
+PORT=5000
+MODEL_PATH=resources/multitask_model
+```
+
+---
+
+## 🏃 Running the Application
+
+### Development Mode
 ```bash
 python app.py
 ```
+The API will be available at `http://localhost:5000`.
 
-La API estará disponible en `http://localhost:5000`
-
-## 📋 Endpoints Disponibles
-
-### 1. Health Check
-**GET** `/health`
-
-Verifica el estado de la API y si el modelo está cargado.
-
+### Using Docker
 ```bash
-curl -X GET http://localhost:5000/health
+docker build -t predictdesk-backend .
+docker run -p 5000:5000 predictdesk-backend
 ```
 
-**Respuesta:**
+---
+
+## 📑 API Documentation
+
+### 1. Health Check
+**GET** `/health`  
+Check if the service and model are active.
+
+**Response:**
 ```json
 {
   "status": "ok",
-  "message": "API funcionando correctamente",
-  "model_loaded": true,
-  "resources_dir": "resources"
+  "model_loaded": true
 }
 ```
 
-### 2. Información del Modelo
-**GET** `/model/info`
+### 2. Model Information
+**GET** `/model/info`  
+Retrieve labels, encoder classes, and configuration.
 
-Obtiene información detallada del modelo cargado.
+### 3. Predict
+**POST** `/predict`  
+The main inference endpoint.
 
-```bash
-curl -X GET http://localhost:5000/model/info
-```
-
-**Respuesta:**
+**Request Body:**
 ```json
 {
-  "model_loaded": true,
-  "config": {
-    "model_name": "cardiffnlp/twitter-xlm-roberta-base-sentiment",
-    "learning_rate": 2e-5,
-    "num_train_epochs": 3
+  "text": "The service was excellent and the staff was very helpful."
+}
+```
+
+**Response Example:**
+```json
+{
+  "status": "success",
+  "predictions": {
+    "sentiment": "highly_satisfied",
+    "intent": "feedback",
+    "priority": "low"
   },
-  "labels": {
-    "0": "Muy enfadado",
-    "1": "Enfadado",
-    "2": "Neutro",
-    "3": "Satisfecho",
-    "4": "Muy satisfecho"
-  },
-  "evaluation_metrics": {
-    "eval_accuracy": 0.95
+  "confidence_scores": {
+    "sentiment": 0.98,
+    "intent": 0.85,
+    "priority": 0.92
   }
 }
 ```
 
-### 3. Predicción de Sentimientos
-**POST** `/predict`
+---
 
-Endpoint principal para análisis de sentimientos. Soporta múltiples formatos de entrada.
+## 🐍 Python Usage Example
 
-#### Formato 1: Texto Individual
-```bash
-curl -X POST http://localhost:5000/predict \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Este producto es increíble, estoy muy satisfecho"
-  }'
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "predictions": {
-    "text": "Este producto es increíble, estoy muy satisfecho",
-    "label_id": 4,
-    "label_name": "Muy satisfecho",
-    "confidence": 0.95,
-    "all_probabilities": {
-      "Muy enfadado": 0.01,
-      "Enfadado": 0.02,
-      "Neutro": 0.02,
-      "Satisfecho": 0.15,
-      "Muy satisfecho": 0.95
-    }
-  },
-  "total_processed": 1
-}
-```
-
-#### Formato 2: Lista de Textos
-```bash
-curl -X POST http://localhost:5000/predict \
-  -H "Content-Type: application/json" \
-  -d '{
-    "texts": [
-      "Excelente servicio al cliente",
-      "Producto defectuoso, muy molesto",
-      "Normal, nada especial"
-    ]
-  }'
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "predictions": [
-    {
-      "text": "Excelente servicio al cliente",
-      "label_id": 4,
-      "label_name": "Muy satisfecho",
-      "confidence": 0.92
-    },
-    {
-      "text": "Producto defectuoso, muy molesto",
-      "label_id": 0,
-      "label_name": "Muy enfadado",
-      "confidence": 0.88
-    },
-    {
-      "text": "Normal, nada especial",
-      "label_id": 2,
-      "label_name": "Neutro",
-      "confidence": 0.76
-    }
-  ],
-  "total_processed": 3
-}
-```
-
-#### Formato 3: Datos con ID
-```bash
-curl -X POST http://localhost:5000/predict \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data": [
-      {
-        "id": "review_001",
-        "text": "Me encanta este producto"
-      },
-      {
-        "id": "review_002", 
-        "text": "Terrible experiencia de compra"
-      }
-    ]
-  }'
-```
-
-**Respuesta:**
-```json
-{
-  "success": true,
-  "predictions": [
-    {
-      "text": "Me encanta este producto",
-      "label_id": 4,
-      "label_name": "Muy satisfecho",
-      "confidence": 0.89,
-      "id": "review_001",
-      "all_probabilities": {...}
-    },
-    {
-      "text": "Terrible experiencia de compra",
-      "label_id": 0,
-      "label_name": "Muy enfadado", 
-      "confidence": 0.94,
-      "id": "review_002",
-      "all_probabilities": {...}
-    }
-  ],
-  "total_processed": 2
-}
-```
-
-### 4. Entrenar Modelo (Opcional)
-**POST** `/train`
-
-Endpoint para entrenar un nuevo modelo (generalmente para administradores).
-
-```bash
-curl -X POST http://localhost:5000/train \
-  -H "Content-Type: application/json" \
-  -d '{
-    "dataset": [
-      {"text": "Estoy muy feliz", "label": 4},
-      {"text": "Producto terrible", "label": 0},
-      {"text": "Es normal", "label": 2}
-    ],
-    "config": {
-      "learning_rate": 2e-5,
-      "num_train_epochs": 3
-    }
-  }'
-```
-
-## 🐍 Cliente Python
+You can interact with the API programmatically using the `requests` library:
 
 ```python
 import requests
-import json
 
-class SentimentAPIClient:
-    def __init__(self, base_url="http://localhost:5000"):
-        self.base_url = base_url
+def get_prediction(text):
+    url = "http://localhost:5000/predict"
+    payload = {"text": text}
     
-    def health_check(self):
-        response = requests.get(f"{self.base_url}/health")
+    response = requests.post(url, json=payload)
+    if response.status_code == 200:
         return response.json()
-    
-    def predict_single(self, text):
-        data = {"text": text}
-        response = requests.post(
-            f"{self.base_url}/predict",
-            json=data
-        )
-        return response.json()
-    
-    def predict_multiple(self, texts):
-        data = {"texts": texts}
-        response = requests.post(
-            f"{self.base_url}/predict",
-            json=data  
-        )
-        return response.json()
-    
-    def predict_with_ids(self, data_items):
-        data = {"data": data_items}
-        response = requests.post(
-            f"{self.base_url}/predict",
-            json=data
-        )
-        return response.json()
+    else:
+        return {"error": "Failed to get prediction"}
 
-# Ejemplo de uso
-client = SentimentAPIClient()
-
-# Verificar estado
-print(client.health_check())
-
-# Predicción individual
-result = client.predict_single("Este producto es excelente")
-print(result)
-
-# Predicciones múltiples
-texts = ["Me gusta", "No me gusta", "Está bien"]
-results = client.predict_multiple(texts)
-print(results)
+result = get_prediction("Me siento muy feliz con el resultado.")
+print(f"Sentiment: {result['predictions']['sentiment']}")
 ```
 
-## 🔧 Variables de Entorno
+---
 
+## 🚢 Deployment
+
+### Heroku
+The included `Procfile` allows for seamless Heroku deployment:
 ```bash
-export FLASK_DEBUG=true          # Modo debug
-export FLASK_HOST=0.0.0.0       # Host del servidor
-export FLASK_PORT=5000          # Puerto del servidor
-export RESOURCES_DIR=resources   # Directorio de recursos
+heroku create predictdesk-backend
+git push heroku main
 ```
 
-## ⚠️ Manejo de Errores
-
-La API retorna códigos de estado HTTP apropiados:
-
-- **200**: Éxito
-- **400**: Error de validación en los datos
-- **404**: Endpoint no encontrado
-- **405**: Método no permitido
-- **500**: Error interno del servidor
-- **503**: Servicio no disponible (modelo no cargado)
-
-**Ejemplo de error:**
-```json
-{
-  "error": "El campo 'text' debe ser una cadena no vacía"
-}
-```
-
-## 🚀 Despliegue en Producción
-
-Para producción, considera usar:
-
-- **Gunicorn**: Servidor WSGI más robusto
-- **Docker**: Containerización
-- **Nginx**: Proxy reverso
-- **Variables de entorno**: Para configuración
-
+### Cloud Foundry / IBM Cloud
+The `manifest.yml` is provided for Cloud Foundry environments:
 ```bash
-# Con Gunicorn
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
+ibmcloud cf push
 ```
 
-## 📝 Notas Importantes
+---
 
-1. **Modelo Requerido**: Asegúrate de entrenar el modelo antes de usar la API
-2. **Memoria**: El modelo se carga en memoria al iniciar la aplicación
-3. **Concurrencia**: La API es thread-safe para predicciones
-4. **Límites**: No hay límites de rate limiting implementados por defecto
-5. **Logs**: Los logs se escriben en stdout por defecto
+## 📄 License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+**PredictDesk Team** - *Powering intelligent desk automation.*
